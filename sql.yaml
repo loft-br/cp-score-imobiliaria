@@ -1,85 +1,90 @@
 query: |
-  WITH calendar AS (SELECT DISTINCT DATE_FORMAT(criado_em, "%Y-%m") AS dt_calendar,
-                                    id_imobiliaria
+  WITH calendar AS (SELECT DISTINCT DATE_FORMAT(criado_em, '%Y-%m') AS dt_calendar,
+                                  id_imobiliaria
 
-                    FROM imovel
-                    WHERE YEAR(criado_em) >= 2021
-                    GROUP BY 1, 2),
-
+                  FROM imovel
+                  WHERE YEAR(criado_em) >= 2021
+                  GROUP BY 1, 2),
+                  
     person AS (SELECT id_imovel      AS id_contrato,
                       MIN(id_pessoa) AS id_pessoa
-                        
+                       
                 FROM pessoa_imovel   AS pi
                 JOIN pessoa          AS pe 
                   ON pe.id = pi.id_pessoa
                 
-                WHERE pi.tp_pessoa = "I"   -- (Inquilino)
+                WHERE pi.tp_pessoa = 'I'   -- (Inquilino)
                   AND pe.is_teste = 0
-                  AND pi.status = "2"      -- (Aprovado)
+                  AND pi.status = '2'      -- (Aprovado)
                 
                 GROUP BY 1),
-                  
+                
     #############################################################################################################################
     #                              INFORMAÇÕES GERAIS: IMOBILIÁRIAS, CONTRATOS E INADIMPLÊNCIAS
     #############################################################################################################################
-                  
     info_real_state AS (SELECT DISTINCT id_imobiliaria,
-                                        nm_imobiliaria           AS imobiliaria,
-                                        cidade                   AS cidade_imob,
-                                        uf                       AS uf_imob,
-                                        CAST(latitude  AS FLOAT) AS lat_imob,
-                                        CAST(longitude AS FLOAT) AS long_imob
-                            
+                                    nm_imobiliaria           AS imobiliaria,
+                                    cidade                   AS cidade_imob,
+                                    uf                       AS uf_imob,
+                                    CAST(latitude  AS FLOAT) AS lat_imob,
+                                    CAST(longitude AS FLOAT) AS long_imob
+                           
                         FROM imobiliaria
                         WHERE is_teste = 0
                           AND status NOT IN (2, 4)),
-                            
+                          
     info_contracts AS (SELECT ia.dt_inicio              AS dt_ativacao,
                               im.id                     AS id_contrato,
                               im.id_imobiliaria,
                               im.vl_loc_solicitado_novo AS vl_locacao,
                               im.dt_exoneracao,
-                              im.cancelado_em
+                              im.cancelado_em,
+                              CASE
+                                WHEN DATEDIFF(im.cancelado_em, ia.dt_inicio) < 31
+                                THEN 1 ELSE 0 END                           			AS is_churn,
+                              CASE 
+                                 WHEN DATEDIFF(im.dt_exoneracao, ia.dt_inicio) <= 180 
+                             	 THEN 1 ELSE 0 END                          			AS exonerated_first_6months
+                          
+                        FROM imovel                 AS im
+                        LEFT JOIN imovel_ativacao   AS ia
+                        ON im.id = ia.id_imovel
+                        
+                        JOIN info_real_state          AS rs
+                        USING(id_imobiliaria)
+                        
+                        LEFT JOIN status            AS st
+                        ON im.status = st.cd_status
+                        
+                        WHERE im.status NOT IN (9)
+                          AND st.relatorio_adm = 1
+                          AND im.id IS NOT NULL
+                          AND ia.dt_inicio != ""
+                          AND im.cep != 0),
+                          
+	info_default AS (SELECT DISTINCT bl.id_imovel                AS id_contrato,
+                                      bv.id,
+                                      bv.id_blacklist,
+                                      bv.saida,
+                                      bv.status                  AS status_inad,
+                                      bv.criado_em               AS dt_communication,
+                                      bv.valor,
+                                      bv.data_pendencia          AS dt_pendencia,
+                                      bv.data_pagamento          AS dt_indemnity,
+                                      
+                                      -- Ajuste para data de cancelamento em comunicados cancelados (debelados)
+                                      DATE(CASE 
+                                    	    WHEN bv.status = 20                                                                                         THEN bv.alterado_em
+                                            WHEN bv.status IN (6, 31, 36, 20) AND bv.dt_cancelamento IS NULL                                            THEN bv.dt_cancelamento_imobiliaria 
+                                    	    WHEN bv.status IN (6, 31, 36, 20) AND bv.dt_cancelamento IS NULL AND bv.dt_cancelamento_imobiliaria IS NULL THEN bv.alterado_em
+                                                                                                                                                        ELSE bv.dt_cancelamento
+                                      END) AS dt_cancel_communication
                             
-                      FROM imovel                 AS im
-                      LEFT JOIN imovel_ativacao   AS ia
-                      ON im.id = ia.id_imovel
-                      
-                      JOIN info_real_state          AS rs
-                      USING(id_imobiliaria)
-                      
-                      LEFT JOIN status            AS st
-                      ON im.status = st.cd_status
-                      
-                      WHERE im.status NOT IN (9)
-                        AND st.relatorio_adm = 1
-                        AND im.id IS NOT NULL
-                        AND ia.dt_inicio != ""
-                        AND im.cep != 0),
-
-    info_default AS (SELECT DISTINCT bl.id_imovel        AS id_contrato,
-                                    bv.id,
-                                    bv.id_blacklist,
-                                    bv.saida,
-                                    bv.status            AS status_inad,
-                                    bv.criado_em         AS dt_communication,
-                                    bv.valor,
-                                    bv.data_pendencia    AS dt_pendencia,
-                                    bv.data_pagamento    AS dt_indemnity,
-                                        
-                                    -- Ajuste para data de cancelamento em comunicados cancelados (debelados)
-                                    DATE(CASE 
-                                        WHEN bv.status = 20                                                                                         THEN bv.alterado_em
-                                        WHEN bv.status IN (6, 31, 36, 20) AND bv.dt_cancelamento IS NULL                                            THEN bv.dt_cancelamento_imobiliaria 
-                                        WHEN bv.status IN (6, 31, 36, 20) AND bv.dt_cancelamento IS NULL AND bv.dt_cancelamento_imobiliaria IS NULL THEN bv.alterado_em
-                                                                                                                                                    ELSE bv.dt_cancelamento
-                                    END) AS dt_cancel_conclusao
-                              
                     FROM blacklist_valor         AS bv
-                    JOIN blacklist               AS bl
+            		JOIN blacklist               AS bl
                       ON bl.id = bv.id_blacklist
-                
-                    LEFT JOIN status_blacklist   AS sb
+            		
+            		LEFT JOIN status_blacklist   AS sb
                       ON sb.cd_status = bv.status
                       
                     JOIN person                  AS pe
@@ -91,213 +96,299 @@ query: |
                       AND YEAR(bv.criado_em) >= 2021
                     
                     GROUP BY 1, 2, 4, 5, 6, 7, 8, 9, 10),
-                      
-                      
+                    
     #############################################################################################################################
-    #                                           STATUS E HISTÓRICO DE ATIVIDADE DOS CONTRATOS 
+    #                                           HISTÓRICO DE CONTRATOS ATIVOS
     #############################################################################################################################
-    historic_per_cohort AS (SELECT dt_calendar,
-                                  id_imobiliaria,
-                                  id_contrato,
-                                  CASE
-                                    WHEN DATE_FORMAT(dt_ativacao, "%Y-%m") <= dt_calendar 
-                                    AND (DATE_FORMAT(cancelado_em, "%Y-%m") > dt_calendar
-                                          OR DATE_FORMAT(dt_exoneracao, "%Y-%m") > dt_calendar
-                                          OR (DATE_FORMAT(cancelado_em, "%Y-%m") IS NULL
-                                              AND DATE_FORMAT(dt_exoneracao, "%Y-%m") IS NULL)) THEN dt_ativacao
-                                  END AS dt_ativacao,
-                                  IF (DATE_FORMAT(dt_exoneracao, "%Y-%m") = dt_calendar, 
-                                    dt_exoneracao,
-                                    NULL
-                                  ) AS dt_exoneracao,
-                                  IF (DATE_FORMAT(cancelado_em, "%Y-%m") = dt_calendar, 
-                                    cancelado_em,
-                                    NULL
-                                  ) AS cancelado_em
-                                
-                            FROM calendar            AS ca
-                            LEFT JOIN info_contracts AS co
-                            USING(id_imobiliaria)),
-                          
+    historic_per_cohort AS (SELECT ca.dt_calendar,
+                                id_imobiliaria,
+                                id_contrato,
+                                CASE
+                                  WHEN DATE_FORMAT(dt_ativacao, '%Y-%m') <= dt_calendar 
+                                   AND (DATE_FORMAT(cancelado_em, '%Y-%m') > dt_calendar
+                                        OR DATE_FORMAT(dt_exoneracao, '%Y-%m') > dt_calendar
+                                        OR (DATE_FORMAT(cancelado_em, '%Y-%m') IS NULL
+                                            AND DATE_FORMAT(dt_exoneracao, '%Y-%m') IS NULL)) THEN dt_ativacao
+                                END AS dt_ativacao,
+                                IF (DATE_FORMAT(dt_exoneracao, '%Y-%m') = dt_calendar, 
+                                  dt_exoneracao,
+                                  NULL
+                                ) AS dt_exoneracao,
+                                IF (DATE_FORMAT(cancelado_em, '%Y-%m') = dt_calendar, 
+                                  cancelado_em,
+                                  NULL
+                                ) AS cancelado_em
+                              
+                        FROM calendar            AS ca
+                        LEFT JOIN info_contracts AS co
+                        USING(id_imobiliaria)),
+                        
     active_per_cohort AS (SELECT dt_calendar,
                                  id_imobiliaria,
                                  SUM(CASE
-                                      WHEN cancelado_em IS NULL
+                                       WHEN cancelado_em IS NULL
                                         AND dt_exoneracao IS NULL 
                                         AND dt_ativacao IS NOT NULL 
-                                    THEN 1 ELSE 0 END)               AS n_active_contracts
+                                     THEN 1 ELSE 0 END)              AS n_active_contracts
                             
-                          FROM historic_per_cohort
-                          GROUP BY 1, 2),
+                            FROM historic_per_cohort
+                            GROUP BY 1, 2),
 
-    -- Resumo mensal dos status dos contratos desde sua ativação
-    contracts_status AS (SELECT *,
-                                CASE 
-                                    WHEN DATE_FORMAT(DATE(dt_ativacao), "%Y-%m") = dt_calendar 
-                                    THEN 1 ELSE 0 END                                           AS is_activated,
-                                CASE
-                                    WHEN DATE_FORMAT(DATE(dt_ativacao), "%Y-%m") = dt_calendar 
-                                    AND DATEDIFF(cancelado_em, dt_ativacao) < 31
-                                    THEN 1 ELSE 0 END                                           AS is_churn,
-                                CASE 
-                                    WHEN DATE_FORMAT(DATE(dt_ativacao), "%Y-%m") = dt_calendar 
-                                    AND DATEDIFF(dt_exoneracao, dt_ativacao) <= 180 
-                                    THEN 1 ELSE 0 END                                           AS exonerated_first_6months
-                        
-                          FROM active_per_cohort    AS ac
-                          LEFT JOIN info_contracts  AS co
-                          USING(id_imobiliaria)),
-    
+
     #############################################################################################################################
     #                                                        INDENIZAÇÕES 
     #############################################################################################################################
     -- Apanhado de todas as indenizações pagas para cada imobiliária a partir de 2021
-    indenizaco_financeiro AS (SELECT CAST(IFNULL(REGEXP_SUBSTR(fs.descricao, "[0-9]+"), -2022) AS INTEGER) AS id_blacklist_valor,
+    indenizaco_financeiro AS (SELECT CAST(IFNULL(REGEXP_SUBSTR(fs.descricao, '[0-9]+'), -2022) AS INTEGER) AS id_blacklist_valor,
                                       ss.descricao,
                                       fs.vencimento,
                                       fs.valor                                                             AS valor_do_financeiro
-                                        
-                              FROM financeiro_saida                 AS fs
-                              LEFT JOIN financeiro_saida_status     AS ss 
-                                ON fs.status_id = ss.id
-                                
-                              LEFT JOIN financeiro_saida_formapagto AS pg
-                                ON pg.id = fs.formapagto_id
-                                
-                              LEFT JOIN financeiro_saida_tipo       AS ti 
-                                ON ti.id = fs.tipo_cap
-                              
-                              WHERE 1=1
-                                AND fs.categoria = 23
-                                AND YEAR(fs.vencimento) >= 2021
-                                AND DATE(fs.vencimento) <= CURRENT_DATE
-                                AND IFNULL(fs.empresa_id, "nulo") NOT IN ("nulo", 1050, 2446)
-                                AND ss.descricao IN ("Aguardando Liberação", "Aguardando Conferência", "Aguardando Pagamento", "Pagamento Automatizado", "Pago")),
-
+                                      
+                               FROM financeiro_saida                 AS fs
+                               LEFT JOIN financeiro_saida_status     AS ss 
+                                 ON fs.status_id = ss.id
+                                 
+                               LEFT JOIN financeiro_saida_formapagto AS pg
+                                 ON pg.id = fs.formapagto_id
+                                 
+                               LEFT JOIN financeiro_saida_tipo       AS ti 
+                                 ON ti.id = fs.tipo_cap
+                               
+                               WHERE 1=1
+                                 AND fs.categoria = 23
+                                 AND YEAR(fs.vencimento) >= 2021
+                                 AND DATE(fs.vencimento) <= CURRENT_DATE
+                                 AND IFNULL(fs.empresa_id, 'nulo') NOT IN ('nulo', 1050, 2446)
+                                 AND ss.descricao IN ('Aguardando Liberação', 'Aguardando Conferência', 'Aguardando Pagamento', 'Pagamento Automatizado', 'Pago')),
+	
+	
     -- Tabela auxiliar para identificar os tipos de indenizações
     menor_pgt AS (SELECT de.id_blacklist,
                          im.id_imobiliaria,
-                         MIN(DATE(de.dt_indemnity)) AS menor_pgto
+    					 MIN(DATE(de.dt_indemnity)) AS menor_pgto
                         
-                  FROM info_default AS de
-                  LEFT JOIN imovel  AS im
-                  ON im.id = de.id_contrato
+                         FROM info_default AS de
+                         LEFT JOIN imovel  AS im
+						 ON im.id = de.id_contrato
 
-                  WHERE DATE(de.dt_indemnity) IS NOT NULL
-                  GROUP BY 1, 2),
+                         WHERE DATE(de.dt_indemnity) IS NOT NULL
+                         GROUP BY 1, 2),
 
     -- Tipos de indenização pagas por contrato
     tipo_indenizacao AS (SELECT mp.id_imobiliaria,
-                                bv.id_contrato,
-                                bv.dt_communication,
+    							de.id_contrato,
+                                de.dt_communication,
                                 fi.vencimento,
-                                bv.id_blacklist,
+                                de.id_blacklist,
                                 CASE 
-                                    WHEN bv.saida = 0 AND IFNULL(DATE(mp.menor_pgto), "1999-04-30") = IFNULL(DATE(bv.dt_indemnity), "1999-04-30") THEN "A: Primeira"
-                                    WHEN bv.saida = 1 AND IFNULL(DATE(mp.menor_pgto), "1999-04-30") = IFNULL(DATE(bv.dt_indemnity), "1999-04-30") THEN "C: Saida 1" 
-                                    WHEN bv.saida = 1                                                                                             THEN "C: Saida 2" 
-                                                                                                                                                  ELSE "B: Segunda" 
+                                    WHEN de.saida = 0 AND IFNULL(DATE(mp.menor_pgto), '1999-04-30') = IFNULL(DATE(de.dt_indemnity), '1999-04-30') THEN 'A: Primeira'
+                                    WHEN de.saida = 1 AND IFNULL(DATE(mp.menor_pgto), '1999-04-30') = IFNULL(DATE(de.dt_indemnity), '1999-04-30') THEN 'C: Saida 1' 
+                                    WHEN de.saida = 1                                                                                             THEN 'C: Saida 2' 
+                                                                                                                                                  ELSE 'B: Segunda' 
                                 END AS tipo_indenizacao, 
-                                fi.valor_do_financeiro             AS valor
-                                
-                                FROM indenizaco_financeiro         AS fi
-                                LEFT JOIN info_default             AS bv
-                                  ON fi.id_blacklist_valor = bv.id
+                                fi.valor_do_financeiro             AS indemnity_value
+                                  
+                                FROM info_default AS de
+                                JOIN indenizaco_financeiro AS fi
+                                  ON fi.id_blacklist_valor = de.id
                                 
                                 LEFT JOIN menor_pgt                AS mp
                                 USING(id_blacklist)),
 
-                              
-    #############################################################################################################################
-    #                                                        STATUS DAS COMUNICAÇÕES 
-    #############################################################################################################################                             
-    communication_historic as (SELECT co.dt_ativacao,
-                                      co.id_imobiliaria,
-                                      de.id_contrato,
-                                      de.dt_communication,
-                                      CASE WHEN DATEDIFF(de.dt_communication, co.dt_ativacao) <= 90 	
-                                           THEN 1 ELSE 0 END                                                	AS is_commun_first_90days,
-                                      CASE WHEN de.dt_communication IS NOT NULL
-                                            AND de.status_inad IN (6, 31, 36, 20) 
-                                            AND de.dt_cancel_conclusao IS NOT NULL 
-                                           THEN 1 ELSE 0 END                                                	AS is_debelado,
-                                      CASE WHEN ti.tipo_indenizacao IN ("A: Primeira", "B: Segunda") 
-                                           THEN ti.valor ELSE 0 END                             					    AS valor_indenizado,
-                                      CASE WHEN ti.id_blacklist IS NOT NULL 
-                                            AND ti.tipo_indenizacao IN ("A: Primeira", "B: Segunda") 
-                                           THEN 1 ELSE 0 END 														                      AS is_indemnified,
-                                      CASE WHEN ti.vencimento <= DATE_ADD(co.dt_ativacao, INTERVAL 180 DAY)
-                                            AND DATEDIFF(NOW(), co.dt_ativacao) >= 180
-                                            AND DATEDIFF(co.cancelado_em, co.dt_ativacao) >= 180 
-                                            AND ti.tipo_indenizacao IN ("A: Primeira", "B: Segunda")                          	      
-                                           THEN 1 ELSE 0 END 														                      AS is_indemn_first_6months
-                            
-                      FROM info_default                     AS de 
-                      JOIN info_contracts                   AS co
-                      USING(id_contrato)
-                      
-                      LEFT JOIN tipo_indenizacao            AS ti
-                      ON (de.id_contrato = ti.id_contrato
-                      AND de.dt_communication = ti.dt_communication)
-                      
-                      WHERE IFNULL(DATE_FORMAT(de.dt_cancel_conclusao, "%Y-%m"), "NULO") NOT IN ("2019-07","2021-10")
-                      AND YEAR(co.dt_ativacao) >= 2021),
-          
-    contracts_communications AS (SELECT dt_ativacao,
-                                        id_contrato,
-                                        id_imobiliaria,
-                                        SUM(is_debelado) 			 AS n_debelacoes,
-                                        SUM(is_indemnified)			 AS n_indemnities,
-                                        SUM(valor_indenizado)		 AS valor_indenizado,
-                                        MAX(is_commun_first_90days)  AS is_commun_first_90days,
-                                        MAX(is_indemn_first_6months) AS is_indemn_first_6months
-                  
-                                  FROM communication_historic
-                                  GROUP BY 1, 2, 3),
-                  
-    #############################################################################################################################
-    #                          INFORMAÇÕES AGREGADAS POR IMOBILIÁRIA: CONTRATOS E COMUNICAÇÕES                  
-    #############################################################################################################################
-    imobs_contracts AS (SELECT cs.dt_calendar,
-                                cs.id_imobiliaria,
-                                rs.imobiliaria,
-                                rs.lat_imob,
-                                rs.long_imob,
-                                cs.n_active_contracts,
-                                SUM(cs.is_activated)                                                              AS n_activated_contracts,
-                                SUM(cs.is_churn)                                                                  AS n_churn_contracts,
-                                AVG(CASE WHEN cs.is_churn = 1 THEN cs.vl_locacao END)                             AS avg_locacao_churn,
-                                AVG(CASE WHEN cs.is_churn = 0 AND is_activated = 1 THEN cs.vl_locacao END)        AS avg_locacao_activated,
-                                -- SUM(cs.is_canceled)                                                               AS n_canceled_contracts,
-                                AVG(CASE WHEN cs.is_churn = 1 THEN DATEDIFF(cs.cancelado_em, cs.dt_ativacao) END) AS avg_days_to_terminate_churn,
-                                AVG(CASE 
-                                      WHEN DATE_FORMAT(cancelado_em, "%Y-%m") = dt_calendar
-                                        AND DATEDIFF(cancelado_em, dt_ativacao) > 30    -- Para não contabilizar churns que iniciam em um mês e se encerram em outro mês
-                                        AND cs.is_churn = 0
-                                    THEN DATEDIFF(cs.cancelado_em, cs.dt_ativacao) END)                           AS avg_days_to_terminate,
-                                -- SUM(cs.is_exonerated)                                                             AS n_exonerated_contracts,
-                                SUM(cs.exonerated_first_6months)                                                  AS n_activated_exon_first_6months
-                                -- AVG(DATEDIFF(cs.dt_exoneracao, cs.dt_ativacao))                                   AS avg_days_to_exonerate
-                          
-                          FROM contracts_status         AS cs
-                          JOIN info_real_state          AS rs
-                          USING(id_imobiliaria)
-                      
-                          GROUP BY 1, 2, 3, 4, 5, 6),
-                          
-    imobs_communications AS (SELECT DATE_FORMAT(dt_ativacao,"%Y-%m") AS dt_calendar,
-                      id_imobiliaria,
-                      SUM(n_debelacoes) AS n_debelacoes_activated,
-                      SUM(n_indemnities) AS n_indemnities_activated,
-                      SUM(valor_indenizado) AS total_indemnities_activated,
-                      SUM(is_commun_first_90days) AS n_activated_commun_first_90days,
-                      SUM(is_indemn_first_6months) AS n_activated_indemn_first_6months
+                             
+	#############################################################################################################################
+	#                                                        STATUS DAS COMUNICAÇÕES 
+  #############################################################################################################################                             
+	communication_historic as (SELECT co.dt_ativacao,
+									  co.id_imobiliaria,
+					                  de.id_contrato,
+					                  de.dt_communication,
+					                  CASE WHEN DATEDIFF(de.dt_communication, co.dt_ativacao) <= 90 	
+					                      THEN 1 ELSE 0 END                                              		AS is_commun_first_90days,
+					                  CASE WHEN de.dt_communication IS NOT NULL
+				                            AND de.status_inad IN (6, 31, 36, 20) 
+				                            AND de.dt_cancel_communication IS NOT NULL 
+					                       THEN 1 ELSE 0 END                                              		AS is_debelado,
+				                      CASE WHEN ti.id_blacklist IS NOT NULL 
+				                      		AND ti.tipo_indenizacao IN ("A: Primeira", "B: Segunda") 
+				                      		THEN 1 ELSE 0 END 													AS is_indemnified,
+				                      CASE WHEN ti.vencimento <= DATE_ADD(co.dt_ativacao, INTERVAL 180 DAY)
+				                            AND DATEDIFF(NOW(), co.dt_ativacao) >= 180
+				                            AND DATEDIFF(co.cancelado_em, co.dt_ativacao) >= 180 
+				                            AND ti.tipo_indenizacao IN ("A: Primeira", "B: Segunda")                          	      
+				                            THEN 1 ELSE 0 END 													AS is_indemn_first_6months,
+			                          CASE WHEN ti.tipo_indenizacao IN ("A: Primeira", "B: Segunda") 
+				                      	   THEN ti.indemnity_value ELSE 0 END                             		AS indemnity_value
+				                  
+					           FROM info_default          AS de 
+					           JOIN info_contracts  	  AS co
+					           USING(id_contrato)
+					           
+					           LEFT JOIN tipo_indenizacao AS ti
+							   ON (de.id_contrato = ti.id_contrato
+							   		AND de.dt_communication = ti.dt_communication)
+					           
+					           WHERE IFNULL(DATE_FORMAT(de.dt_cancel_communication, '%Y-%m'), "NULO") NOT IN ('2019-07','2021-10')),
+         
+					           
+	contracts_communications AS (SELECT dt_ativacao,
+										id_contrato,
+										id_imobiliaria,
+										MAX(is_debelado) 			 AS n_debelacoes,
+										MAX(is_indemnified)			 AS n_indemnities,
+										SUM(indemnity_value)		 AS indemnity_value,
+										MAX(is_commun_first_90days)  AS is_commun_first_90days,
+										MAX(is_indemn_first_6months) AS is_indemn_first_6months
+								
+								 FROM communication_historic
+								 GROUP BY 1, 2, 3),
+					           
+	#############################################################################################################################
+    #                                                  SCORES DOS CONTRATOS 
+    ############################################################################################################################# 
+    -- Score de risco de cada contrato
+    scores AS (SELECT ic.dt_ativacao,
+    					ic.id_contrato,
+                        ic.id_imobiliaria,
+                        IFNULL(cr.decisao_bureau, 'SERASA')               AS bureau,
+                        # Legado 4KST
+                        CASE WHEN kt.id_imovel = ic.id_contrato AND kt.score_simples_avg >= 792 THEN "A"
+                             WHEN kt.id_imovel = ic.id_contrato AND kt.score_simples_avg >= 653 THEN "B"
+                             WHEN kt.id_imovel = ic.id_contrato AND kt.score_simples_avg >= 481 THEN "C"
+                             WHEN kt.id_imovel = ic.id_contrato AND kt.score_simples_avg >= 401 THEN "D"
+                             WHEN kt.id_imovel = ic.id_contrato AND kt.score_simples_avg >=   0 THEN "E"
+                             
+                             WHEN cr.score_medio_4kst >= 792 THEN "A"
+                             WHEN cr.score_medio_4kst >= 653 THEN "B"
+                             WHEN cr.score_medio_4kst >= 481 THEN "C"
+                             WHEN cr.score_medio_4kst >= 401 THEN "D"
+                             WHEN cr.score_medio_4kst >=   1 THEN "E"
+                             WHEN cr.score_medio_4kst =    0 THEN "N/I"
+                             
+                             WHEN ic.id_contrato = scl.id_imovel AND scl.grupo_score IN ("A","B","C","D","N/I") THEN scl.grupo_score
+                             WHEN ic.id_contrato = scl.id_imovel AND scl.grupo_score in ("E")                   THEN (CASE WHEN scl.pontuacao_score < 300 THEN 'E' END)
+                             
+                             WHEN cr.score_bureau >= 900 THEN "A"
+                             WHEN cr.score_bureau >= 700 THEN "B"
+                             WHEN cr.score_bureau >= 400 THEN "C"
+                             WHEN cr.score_bureau >= 300 THEN "D"
+                             WHEN cr.score_bureau >=   1 THEN "E"
+                                                         ELSE "N/I" 
+                        END AS faixa_score,
+                        
+                        CASE WHEN kt.id_imovel = ic.id_contrato         THEN kt.score_simples_avg
+                             WHEN cr.id_pessoa = ia.id_pessoa_principal THEN cr.score_medio_4kst
+                             WHEN ic.id_contrato        = scl.id_imovel THEN scl.pontuacao_score
+                                                                        ELSE "N/I"
+                        END AS pontuacao_score
+                                 
+                FROM info_contracts                         AS ic
+                LEFT JOIN score_legado_planejamento         AS scl 
+                ON scl.id_imovel = ic.id_contrato
                 
-                FROM contracts_communications
-                GROUP BY 1, 2)
+                LEFT JOIN imovel_analise                    AS ia 
+                ON ia.id_imovel = ic.id_contrato
+                
+                LEFT JOIN legado_4kst                       AS kt 
+                ON kt.id_imovel = ic.id_contrato
+                
+                LEFT JOIN consulta_realizada                AS cr 
+                ON cr.id_pessoa = ia.id_pessoa_principal
 
-SELECT *
-FROM imobs_contracts           AS co
-LEFT JOIN imobs_communications AS ic
-ON (co.dt_calendar = ic.dt_calendar
-    AND co.id_imobiliaria = ic.id_imobiliaria)
+                GROUP BY 1, 2),
+                
+    contracts_risk AS (SELECT DATE_FORMAT(dt_ativacao, '%Y-%m') 						 AS dt_calendar,
+							  id_imobiliaria,                                   
+							  COUNT(id_contrato) 				 						 AS n_activated_contracts,
+							  SUM(CASE WHEN faixa_score in ("A", "B") THEN 1 ELSE 0 END) AS ratings_AB,
+							  SUM(CASE WHEN faixa_score = "C" 		  THEN 1 ELSE 0 END) AS rating_C,
+							  SUM(CASE WHEN faixa_score = "D" 		  THEN 1 ELSE 0 END) AS rating_D,
+							  SUM(CASE WHEN faixa_score = "E" 		  THEN 1 ELSE 0 END) AS rating_E
+						       
+						FROM scores
+						GROUP BY 1, 2),
+								 
+	#############################################################################################################################
+    #                          INFORMAÇÕES AGREGADAS POR IMOBILIÁRIA: CONTRATOS E COMUNICAÇÕES
+    #############################################################################################################################	 
+    imobs_contracts AS (SELECT DATE_FORMAT(ic.dt_ativacao, '%Y-%m') AS dt_calendar,
+                              ic.id_imobiliaria,
+                              rs.imobiliaria,
+                              rs.lat_imob,
+                              rs.long_imob,
+                              ac.n_active_contracts,
+                              cr.n_activated_contracts,
+                    	      ROUND(cr.ratings_AB / cr.n_activated_contracts, 2) AS ratings_AB,
+                    	      ROUND(cr.rating_C / cr.n_activated_contracts, 2)   AS rating_C,
+                    	      ROUND(cr.rating_D / cr.n_activated_contracts, 2)   AS rating_D,
+                    	      ROUND(cr.rating_E / cr.n_activated_contracts, 2)   AS rating_E,
+                              SUM(ic.is_churn)                                                                 			  AS n_churn_contracts,
+                              ROUND(AVG(CASE WHEN ic.is_churn = 1 THEN ic.vl_locacao END), 2)                             AS avg_locacao_churn,
+                              ROUND(AVG(ic.vl_locacao), 2)     														      AS avg_locacao_not_churn,
+                              -- SUM(cs.is_canceled)                                                               AS n_canceled_contracts,
+                              ROUND(AVG(CASE WHEN ic.is_churn = 1 THEN DATEDIFF(ic.cancelado_em, ic.dt_ativacao) END), 2) AS avg_days_to_terminate_churn,
+                              ROUND(AVG(CASE 
+                                     WHEN DATEDIFF(ic.cancelado_em, ic.dt_ativacao) > 30    -- Para não contabilizar churns que iniciam em um mês e se encerram em outro mês
+                                      AND ic.is_churn = 0
+                                 	 THEN DATEDIFF(ic.cancelado_em, ic.dt_ativacao) END), 2)                         	  AS avg_days_to_terminate_not_churn,
+                              -- SUM(cs.is_exonerated)                                                             AS n_exonerated_contracts,
+                              SUM(ic.exonerated_first_6months)                                                  		  AS n_exon_first_6months
+                               -- AVG(DATEDIFF(cs.dt_exoneracao, cs.dt_ativacao))                                   AS avg_days_to_exonerate
+                        
+                         FROM info_contracts         AS ic
+                         JOIN info_real_state        AS rs
+                         USING(id_imobiliaria)
+                         
+                         JOIN active_per_cohort AS ac
+                         ON (DATE_FORMAT(ic.dt_ativacao, '%Y-%m') = ac.dt_calendar
+                             AND ic.id_imobiliaria = ac.id_imobiliaria)
+                             
+                         LEFT JOIN contracts_risk 	AS cr 
+                         ON (DATE_FORMAT(ic.dt_ativacao, '%Y-%m') = cr.dt_calendar
+	                         AND ic.id_imobiliaria = cr.id_imobiliaria)
+                    
+                         GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
+                        
+	imobs_communications AS (SELECT DATE_FORMAT(dt_ativacao,"%Y-%m") AS dt_calendar,
+							 	    id_imobiliaria,
+							 	    SUM(n_debelacoes) 				 AS n_debelados,
+							 	    SUM(n_indemnities) 				 AS n_indemnified,
+							 	    SUM(indemnity_value) 			 AS indemnity_value,
+								    SUM(is_commun_first_90days)  	 AS n_commun_first_90days,
+								    SUM(is_indemn_first_6months)   	 AS n_indemn_first_6months
+							
+							FROM contracts_communications
+							GROUP BY 1, 2)
+
+                        
+  SELECT cm.dt_calendar,
+   	   cm.id_imobiliaria,
+	     co.imobiliaria,
+	     co.lat_imob,
+	     co.long_imob,
+	     cr.n_activated_contracts,
+	     ROUND(cr.ratings_AB / cr.n_activated_contracts, 2) AS ratings_AB,
+	     ROUND(cr.rating_C / cr.n_activated_contracts, 2)   AS rating_C,
+	     ROUND(cr.rating_D / cr.n_activated_contracts, 2)   AS rating_D,
+	     ROUND(cr.rating_E / cr.n_activated_contracts, 2)   AS rating_E
+	     cm.n_commun_first_90days,
+	     cm.n_debelados,
+	     cm.n_indemnified,
+	     cm.indemnity_value,
+	     cm.n_indemn_first_6months
+       co.avg_locacao_not_churn,
+       co.avg_days_to_terminate_not_churn,
+	     co.n_churn_contracts,
+	     co.avg_locacao_churn,
+	     co.avg_days_to_terminate_churn,
+	     co.n_exon_first_6months
+	   
+	   
+  FROM imobs_contracts 	  						    AS co
+  LEFT JOIN imobs_communications  				AS cm 
+  ON (co.dt_calendar = cm.dt_calendar
+      AND co.id_imobiliaria = cm.id_imobiliaria)
+
+  LEFT JOIN contracts_risk 						    AS cr 
+  ON (co.dt_calendar = cr.dt_calendar
+  	  AND co.id_imobiliaria = cr.id_imobiliaria)
