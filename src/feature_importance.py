@@ -3,7 +3,7 @@ import shap
 
 class ShapValues:
 
-    def __init__(self, model, X, **kwargs):
+    def __init__(self, model, X):
         self.model = model
         self.X = X
 
@@ -17,7 +17,7 @@ class ShapValues:
 
     def summary_plot(self, **kwargs):
 
-        if 'plot_type' in kwargs:
+        if "plot_type" in kwargs:
             return shap.summary_plot(self.shap_values, self.X, **kwargs)
         else:
             return shap.summary_plot(self.shap_values[1], self.X, **kwargs)
