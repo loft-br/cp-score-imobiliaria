@@ -9,9 +9,12 @@
 **/.empty
 *.ipynb
 
-# Data and Notebooks files
+# Data and Notebook files
 data/*
 notebooks/*
+*.csv
 
 # Keep .gitkeep files
 !**/.gitkeep
+
+*.DS_Store

@@ -1,4 +1,5 @@
 import pandas as pd
+import datetime as dt
 from typing import Tuple
 
 
@@ -21,3 +22,20 @@ class DataProcessor:
             )
 
         return self.df
+
+
+def transform_data_type(df, columns_dtype, strftime=False):
+
+    for dtype, columns in columns_dtype.items():
+        if dtype == "datetime":
+            for column in columns:
+                df[column] = pd.to_datetime(df[column])
+
+                if strftime:
+                    df[column] = df[column].dt.strftime("%Y-%m")
+
+        else:
+            for column in columns:
+                df[column] = df[column].astype(dtype)
+    
+    return df
