@@ -16,7 +16,7 @@ class ClassificationModel:
 
     def fit(self, **kwargs):
         
-        X_train, y_train = get_data(self.df, "2022-08", "train")
+        X_train, y_train = get_data(self.df, step="train", **kwargs)
         self.model.fit(X_train, y_train)
 
         self.X_train, self.y_train = X_train, y_train
@@ -25,7 +25,7 @@ class ClassificationModel:
 
     def test_model(self, **kwargs):
 
-        X_test, y_test = get_data(self.df, "2022-08", "test")
+        X_test, y_test = get_data(self.df, step="test", **kwargs)
         self.X_test, self.y_test = X_test, y_test
 
         y_pred = self.model.predict_proba(X_test)[:,1]

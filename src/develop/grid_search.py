@@ -18,9 +18,9 @@ class GridSearch:
 
     def fit(self, cutoff_date):
 
-        search_info = self.grid_options.get(self.estimator)
+        search_domain = self.grid_options.get(self.estimator)
         self.searcher = GridSearchCV(
-            search_info["estimator"], search_info["params"]
+            search_domain["estimator"], search_domain["params"]
         )
 
         X, y = self.get_data(cutoff_date)
@@ -30,7 +30,7 @@ class GridSearch:
 
     def get_data(self, cutoff_date):
 
-        X, y = get_data(self.df, cutoff_date, "validation")
+        X, y = get_data(self.df, cutoff_date, "train")
         print(X.shape, y.shape)
 
         return X, y
@@ -49,10 +49,14 @@ class GridSearch:
             "lgbm": {
                 "estimator": LGBMClassifier(),
                 "params": {
-                    'n_estimators': [300, 400, 500],
+                    'metric': ['auc'],
+                    'random_state': [5],
+                    'objective': ['binary'],
                     'max_depth': [3, 4, 5],
-                    'learning_rate': [0.004, 0.006, 0.008, 0.01],
-                    'random_state': [5]
+                    'n_estimators': [300, 400, 500],
+                    'subsample': [0.4, 0.5, 0.6, 0.7],
+                    'colsample_bytree': [0.5, 0.6, 0.7, 0.8],
+                    'learning_rate': [0.006, 0.008, 0.01]
                 }
             }
         }

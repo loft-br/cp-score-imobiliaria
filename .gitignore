@@ -7,11 +7,10 @@
 **/spark-warehouse/
 **/__pycache__/
 **/.empty
-*.ipynb
+# *.ipynb
 
 # Data and Notebook files
 data/*
-notebooks/*
 *.csv
 
 # Keep .gitkeep files
