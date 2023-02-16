@@ -22,10 +22,11 @@ class CrossValidation:
             self.cohort = cohort
 
             self.train_model()
-            auc = self.test_model()
+            auc = self.validate_model()
             results.append(auc)
             
-            print(f"TRAINING UNTIL ({(cohort - pd.DateOffset(months=1)).strftime('%Y-%m')}) | VALIDATING ON ({cohort.strftime('%Y-%m')}): (AUC={round(auc, 4)})")
+            # print(f"TRAINING UNTIL ({(cohort - pd.DateOffset(months=1)).strftime('%Y-%m')}) | VALIDATING ({cohort.strftime('%Y-%m')}): (AUC={round(auc, 4)})")
+            print(f"TRAINING UNTIL ({(cohort - pd.DateOffset(months=1)).strftime('%Y-%m')}) | VALIDATING FROM ({cohort.strftime('%Y-%m')}) UNTIL ({to_}): (AUC={round(auc, 4)})")
 
         return round(np.mean(results), 4)
 
@@ -36,9 +37,9 @@ class CrossValidation:
 
         return self.model
 
-    def test_model(self, **kwargs):
+    def validate_model(self, **kwargs):
 
-        X, y = get_data(self.df, self.cohort, "test")
+        X, y = get_data(self.df, self.cohort, "validation")
 
         y_pred = self.model.predict_proba(X)[:,1]
         auc = self.eval_metric(y, y_pred)

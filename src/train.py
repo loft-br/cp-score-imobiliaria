@@ -13,25 +13,30 @@ class ClassificationModel:
 
         self.X_train, self.y_train = None, None
         self.X_test, self.y_test = None, None
+        self.result = None
 
-    def fit(self, **kwargs):
+    def fit(self, cutoff_period):
         
-        X_train, y_train = get_data(self.df, step="train", **kwargs)
+        X_train, y_train = get_data(self.df, cutoff_period, step="train")
         self.model.fit(X_train, y_train)
 
         self.X_train, self.y_train = X_train, y_train
 
         return self
 
-    def test_model(self, **kwargs):
+    def test_model(self, cutoff_period):
 
-        X_test, y_test = get_data(self.df, step="test", **kwargs)
+        X_test, y_test = get_data(self.df, cutoff_period, step="test")
         self.X_test, self.y_test = X_test, y_test
 
         y_pred = self.model.predict_proba(X_test)[:,1]
         auc = self.eval_metric(y_test, y_pred)
 
-        return round(auc, 4)
+        self.result = round(auc, 4)
+
+        print(f"TESTING ON ({cutoff_period})")
+
+        return self.result
 
 
 class TwoStepCalibration:
