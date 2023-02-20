@@ -25,7 +25,6 @@ class CrossValidation:
             auc = self.validate_model()
             results.append(auc)
             
-            # print(f"TRAINING UNTIL ({(cohort - pd.DateOffset(months=1)).strftime('%Y-%m')}) | VALIDATING ({cohort.strftime('%Y-%m')}): (AUC={round(auc, 4)})")
             print(f"TRAINING UNTIL ({(cohort - pd.DateOffset(months=1)).strftime('%Y-%m')}) | VALIDATING FROM ({cohort.strftime('%Y-%m')}) UNTIL ({to_}): (AUC={round(auc, 4)})")
 
         return round(np.mean(results), 4)
