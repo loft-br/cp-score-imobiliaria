@@ -1,0 +1,19 @@
+# Conda env
+**/env
+!.env
+
+# Jupyter Notebook/Python/Databricks metadata
+**/.ipynb_checkpoints/
+**/spark-warehouse/
+**/__pycache__/
+**/.empty
+# *.ipynb
+
+# Data and Notebook files
+data/*
+*.csv
+
+# Keep .gitkeep files
+!**/.gitkeep
+
+*.DS_Store
