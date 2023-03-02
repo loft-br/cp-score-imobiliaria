@@ -1,7 +1,8 @@
 import pandas as pd
 from typing import Tuple
 
-from .params import FEATURES
+# from .params import FEATURES
+from .develop.frame.params_dev import FEATURES
 
 
 def get_data(df, cutoff_period, step) -> Tuple:
@@ -14,7 +15,7 @@ def get_data(df, cutoff_period, step) -> Tuple:
         elif step == "validation":
             df_step = df[
                 (df.dt_calendar >= cutoff_period)
-                & (df.dt_calendar < "2022-12")
+                & (df.dt_calendar < "2022-06")
                 # & (df.dt_calendar != (dt.datetime.now()).strftime("%Y-%m"))
             ]
 

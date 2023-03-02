@@ -13,6 +13,7 @@ class CrossValidation:
         self.eval_metric = eval_metric
 
         self.cohort = None
+        self.cv_result = None
 
     def fit(self, from_, to_):
 
@@ -27,7 +28,9 @@ class CrossValidation:
             
             print(f"TRAINING UNTIL ({(cohort - pd.DateOffset(months=1)).strftime('%Y-%m')}) | VALIDATING FROM ({cohort.strftime('%Y-%m')}) UNTIL ({to_}): (AUC={round(auc, 4)})")
 
-        return round(np.mean(results), 4)
+        self.cv_result = round(np.mean(results), 4)
+
+        return print(round(np.mean(results), 4))
 
     def train_model(self, **kwargs):
         

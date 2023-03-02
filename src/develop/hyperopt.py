@@ -57,17 +57,7 @@ class OptunaOptimize:
         auc_cv = round(np.mean(results), 4)
         print(auc_cv)
 
-        return auc
-
-    # def train(self, params):
-
-    #     model = ExtraTreesClassifier(**params)
-
-    #     cv = CrossValidation(self.df, model, self.eval_metric)
-    #     auc = cv.fit(self.from_, self.to_)
-    #     print(auc)
-
-    #     return auc
+        return auc_cv
     
     def objective(self, trial):
         params = {
