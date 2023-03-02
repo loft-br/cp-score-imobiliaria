@@ -15,14 +15,14 @@ agg_params = {
     "aggregate_list": {
         # "is_activated": "agg_activated_last_90days",
         "is_commun_first_90days": "agg_comun_last_90days",
-        # "is_debelado_first_4months": "agg_deb_last_4months",
-        # "exonerated_first_6months": "agg_exon_last_6months",
         "churn_rate": "agg_churn_rate",
         # "rating_A": "agg_rating_A",
         # "rating_B": "agg_rating_B",
         # "rating_C": "agg_rating_C",
         # "rating_D": "agg_rating_D",
         # "rating_E": "agg_rating_E"
+        # "is_debelado_first_4months": "agg_deb_last_4months",
+        # "exonerated_first_6months": "agg_exon_last_6months",
     }
 }
 
@@ -30,18 +30,28 @@ FEATURES = [
     "lat_imob",
     "long_imob",
     "is_activated",
-    # "agg_activated_last_90days",
+    "churn_rate",
     "rating_A",
     "rating_B",
     "rating_C",
     "rating_D",
     "rating_E",
-    "agg_churn_rate",
-    "agg_comun_last_90days",
+    "is_commun_first_90days",
     # "is_debelado_first_4months",
     # "exonerated_first_6months",
     # "indemnity_value",
     # "vl_locacao",
+
+    # "agg_activated_last_90days",
+    # "agg_churn_rate",
+    # "agg_rating_A",
+    # "agg_rating_B",
+    # "agg_rating_C",
+    # "agg_rating_D",
+    # "agg_rating_E",
+    # "agg_comun_last_90days",
+    # "agg_deb_last_4months",
+    # "agg_exon_last_6months",
 
 ]
 

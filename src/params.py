@@ -10,26 +10,4 @@ FEATURES = [
     "rating_E",
     "agg_churn_rate",
     "agg_comun_last_90days",
-    # "is_debelado_first_4months",
-    # "exonerated_first_6months",
-    # "indemnity_value",
-    # "vl_locacao",
 ]
-
-# FEATURES = [
-#     "lat_imob",
-#     "long_imob",
-#     # "is_activated",
-#     "agg_activated_last_90days",
-#     "agg_rating_A",
-#     "agg_rating_B",
-#     "agg_rating_C",
-#     "agg_rating_D",
-#     "agg_rating_E",
-#     "agg_churn_rate",
-#     "agg_comun_last_90days",
-#     "agg_deb_last_4months",
-#     "agg_exon_last_6months",
-#     # "indemnity_value",
-#     # "vl_locacao",
-# ]
