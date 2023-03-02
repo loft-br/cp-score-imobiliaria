@@ -23,6 +23,12 @@ class DataProcessor:
 
         return self.df
 
+def aggregate_data(df, column, window):
+    return (
+        (df.groupby(["id_imobiliaria"])[column]
+        .rolling(window, min_periods=1).mean()
+        .values)
+    )
 
 def transform_data_type(df, columns_dtype, strftime=False):
 

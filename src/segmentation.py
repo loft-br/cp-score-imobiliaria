@@ -15,10 +15,13 @@ class ImobsSegmentation:
             name='score_imobiliaria',
             dtype="numerical",
             max_n_bins=3,
-            # min_n_bins=3,
+            min_n_bins=3,
             solver="mip",
             gamma=.5
         )
+
+        self.inner_auc = None
+        self.opt_among_auc = None
 
     def fit(self, df):
 
@@ -76,14 +79,17 @@ class ImobsSegmentation:
             segments_auc.items(), columns=["rating", "auc"]
         )
 
-        print(f"\nAUC within segments (mean): {round(inner_auc.mean(numeric_only=True).auc, 3)}")
+        self.inner_auc = inner_auc
+        print(f"\nAUC within segments (mean): {round(self.inner_auc.mean(numeric_only=True).auc, 3)}")
         
-        return inner_auc
+        return self.inner_auc
 
     def calculate_auc_among_segments(self, df, alt_segmentation=None):
 
+        self.opt_among_auc = roc_auc_score(df['target'], df['optimal_bins']).round(3)
+
         print(f"AUC among segments: \
-              \n- Optimal segments: {roc_auc_score(df['target'], df['optimal_bins']).round(3)}")
+              \n- Optimal segments: {self.opt_among_auc}")
         
         if alt_segmentation:
             print(f"- Alternative segments: {roc_auc_score(df['target'], df[alt_segmentation].apply(ord)).round(3)}")
